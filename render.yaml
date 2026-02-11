@@ -1,7 +1,7 @@
 services:
   - type: web
-    name: climate-analyze-api
+    name: solar-power-simulator
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt && cd frontend && npm install && npm run build
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT

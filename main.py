@@ -1,11 +1,21 @@
 import asyncio
 import math
+import os
 from collections import defaultdict
 from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import httpx
 from typing import Optional
 
 app = FastAPI(title="Climate Analyze API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ── Solar simulation constants ──
 MJ_TO_KWH = 0.2778          # 1 MJ = 0.2778 kWh
@@ -139,6 +149,9 @@ def aggregate_monthly(dates: list, temps: list, rads: list,
 
 @app.get("/")
 async def root():
+    index = os.path.join(os.path.dirname(__file__), "frontend", "dist", "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
     return {
         "message": "Climate API is Live",
         "endpoints": {
@@ -245,3 +258,16 @@ async def simulate(
         "annual": annual,
         "monthly": monthly,
     }
+
+# ── フロントエンド静的ファイル配信 ──
+frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+if os.path.isdir(frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """SPA フォールバック: 未知のパスは index.html を返す"""
+        file_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
