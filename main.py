@@ -17,13 +17,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Solar simulation constants ──
+# ── Solar simulation constants (JIS C 8907 準拠) ──
 MJ_TO_KWH = 0.2778          # 1 MJ = 0.2778 kWh
-PERFORMANCE_RATIO = 0.80     # PR（インバータ・配線・汚れ等の損失）
 TEMP_COEFF = -0.004          # 結晶シリコン温度係数 (%/℃)
 NOCT_DELTA = 25.0            # セル温度 ≈ 気温 + 25℃
 STC_TEMP = 25.0              # 標準試験条件温度 (℃)
 LAPSE_RATE = 0.6             # 気温減率: -0.6℃/100m
+
+# ── JIS C 8907 損失係数 (K) ──
+K_SD = 0.95                  # 汚れ損失係数 Ksd (5% 損失)
+K_CW = 0.97                  # 配線損失係数 Kcw (3% 損失)
+K_INV = 0.96                 # パワコン効率 Kinv (4% 損失)
 
 # ── 月ごとの日数 (2024年 / 閏年) ──
 DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
@@ -104,18 +108,19 @@ def tilt_correction_factor(lat: float, tilt: float, month: int) -> float:
 
 
 def calc_daily_energy(radiation_mj: float, temp_c: float,
-                      capacity_kw: float, tilt_factor: float) -> float:
-    """日次発電量 (kWh) を計算"""
+                      capacity_kw: float, tilt_factor: float) -> tuple[float, float]:
+    """日次発電量 (kWh) を JIS C 8907 準拠で計算。(energy, kpt) を返す"""
     psh = radiation_mj * MJ_TO_KWH * tilt_factor
     cell_temp = temp_c + NOCT_DELTA
-    temp_factor = 1 + TEMP_COEFF * (cell_temp - STC_TEMP)
-    return capacity_kw * psh * PERFORMANCE_RATIO * temp_factor
+    kpt = 1 + TEMP_COEFF * (cell_temp - STC_TEMP)
+    energy = capacity_kw * psh * K_SD * K_CW * K_INV * kpt
+    return energy, kpt
 
 
 def aggregate_monthly(dates: list, temps: list, rads: list,
-                      capacity_kw: float, lat: float, tilt: float) -> list:
-    """日別データを月別に集計し、発電量を計算"""
-    buckets = defaultdict(lambda: {"temps": [], "rads": [], "kwh": 0.0, "days": 0})
+                      capacity_kw: float, lat: float, tilt: float) -> tuple[list, float]:
+    """日別データを月別に集計し、発電量を計算。(monthly_data, avg_kpt) を返す"""
+    buckets = defaultdict(lambda: {"temps": [], "rads": [], "kwh": 0.0, "days": 0, "kpts": []})
 
     for i, date_str in enumerate(dates):
         t = temps[i]
@@ -124,19 +129,22 @@ def aggregate_monthly(dates: list, temps: list, rads: list,
             continue
         month = int(date_str.split("-")[1])
         tf = tilt_correction_factor(lat, tilt, month)
-        energy = calc_daily_energy(r, t, capacity_kw, tf)
+        energy, kpt = calc_daily_energy(r, t, capacity_kw, tf)
         b = buckets[month]
         b["temps"].append(t)
         b["rads"].append(r)
         b["kwh"] += energy
+        b["kpts"].append(kpt)
         b["days"] += 1
 
+    all_kpts = []
     result = []
     for m in range(1, 13):
         b = buckets[m]
         days = b["days"] or DAYS_IN_MONTH[m - 1]
         avg_temp = sum(b["temps"]) / len(b["temps"]) if b["temps"] else 0
         avg_rad = sum(b["rads"]) / len(b["rads"]) if b["rads"] else 0
+        all_kpts.extend(b["kpts"])
         result.append({
             "month": m,
             "total_kwh": round(b["kwh"], 1),
@@ -145,7 +153,8 @@ def aggregate_monthly(dates: list, temps: list, rads: list,
             "avg_temp_c": round(avg_temp, 1),
             "avg_radiation_kwh_m2": round(avg_rad * MJ_TO_KWH, 2),
         })
-    return result
+    avg_kpt = sum(all_kpts) / len(all_kpts) if all_kpts else 1.0
+    return result, avg_kpt
 
 @app.get("/")
 async def root():
@@ -229,8 +238,8 @@ async def simulate(
     ]
 
     # ── 月別集計 ──
-    monthly = aggregate_monthly(dates, corrected_temps, rads,
-                                panel_capacity_kw, lat, tilt)
+    monthly, avg_kpt = aggregate_monthly(dates, corrected_temps, rads,
+                                         panel_capacity_kw, lat, tilt)
 
     # ── 年間合計 ──
     annual_kwh = sum(m["total_kwh"] for m in monthly)
@@ -246,6 +255,16 @@ async def simulate(
     if electricity_rate is not None:
         annual["estimated_savings"] = round(annual_kwh * electricity_rate, 1)
 
+    # ── JIS C 8907 損失内訳 ──
+    total_k = K_SD * K_CW * K_INV * avg_kpt
+    loss_breakdown = {
+        "soiling_loss": round((1 - K_SD) * 100, 1),
+        "wiring_loss": round((1 - K_CW) * 100, 1),
+        "inverter_loss": round((1 - K_INV) * 100, 1),
+        "temp_loss_avg": round((1 - avg_kpt) * 100, 1),
+        "total_system_efficiency": round(total_k * 100, 1),
+    }
+
     return {
         "location": {"lat": lat, "lon": lon},
         "elevation_m": elevation,
@@ -253,8 +272,8 @@ async def simulate(
             "capacity_kw": panel_capacity_kw,
             "tilt_deg": round(tilt, 1),
             "azimuth_deg": round(azimuth, 1),
-            "performance_ratio": PERFORMANCE_RATIO,
         },
+        "loss_breakdown": loss_breakdown,
         "annual": annual,
         "monthly": monthly,
     }
