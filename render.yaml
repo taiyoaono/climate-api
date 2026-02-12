@@ -3,5 +3,8 @@ services:
     name: solar-power-simulator
     runtime: python
     plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
     buildCommand: pip install -r requirements.txt && cd frontend && npm install && npm run build
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
