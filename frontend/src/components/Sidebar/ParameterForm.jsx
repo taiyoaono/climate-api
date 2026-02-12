@@ -108,7 +108,7 @@ export default function ParameterForm({ location, onSubmit, loading }) {
       <button
         type="submit"
         disabled={!location || loading}
-        className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-lg transition-colors text-sm"
+        className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-colors text-sm"
       >
         {loading ? 'シミュレーション中…' : 'シミュレーション実行'}
       </button>

@@ -1,8 +1,16 @@
-import { formatKwh, formatPercent, formatCurrency, formatNumber } from '../../utils/formatters';
+import { formatKwh, formatPercent, formatCurrency, formatNumber, formatPercentRaw } from '../../utils/formatters';
 
-function Card({ label, value, unit }) {
+const CARD_STYLES = [
+  { border: 'border-l-amber-500', icon: '⚡' },
+  { border: 'border-l-blue-500', icon: '📊' },
+  { border: 'border-l-green-500', icon: '📈' },
+  { border: 'border-l-purple-500', icon: '💰' },
+  { border: 'border-l-emerald-500', icon: '🔧' },
+];
+
+function Card({ label, value, unit, borderClass }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className={`bg-white rounded-xl border border-gray-200 border-l-4 ${borderClass} shadow-sm p-4 hover:shadow-md transition-shadow`}>
       <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
       <p className="text-2xl font-bold text-gray-900 mt-1">
         {value}
@@ -12,7 +20,7 @@ function Card({ label, value, unit }) {
   );
 }
 
-export default function AnnualSummary({ annual }) {
+export default function AnnualSummary({ annual, lossBreakdown }) {
   const cards = [
     { label: '年間発電量', value: formatKwh(annual.total_kwh) },
     { label: '日平均発電量', value: formatNumber(annual.avg_daily_kwh, 2), unit: 'kWh/日' },
@@ -23,10 +31,14 @@ export default function AnnualSummary({ annual }) {
     cards.push({ label: '年間節約額', value: formatCurrency(annual.estimated_savings) });
   }
 
+  if (lossBreakdown?.total_system_efficiency != null) {
+    cards.push({ label: 'システム効率', value: formatPercentRaw(lossBreakdown.total_system_efficiency) });
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {cards.map((c) => (
-        <Card key={c.label} {...c} />
+    <div className="grid grid-cols-2 gap-3 animate-fadeIn">
+      {cards.map((c, i) => (
+        <Card key={c.label} {...c} borderClass={CARD_STYLES[i % CARD_STYLES.length].border} />
       ))}
     </div>
   );

@@ -7,13 +7,13 @@ import {
   Title,
   Tooltip,
 } from 'chart.js';
-import { MONTH_NAMES_SHORT, CHART_COLORS } from '../../utils/constants';
+import { MONTH_NAMES_SHORT_JA, CHART_COLORS } from '../../utils/constants';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip);
 
 export default function MonthlyChart({ monthly }) {
   const data = {
-    labels: MONTH_NAMES_SHORT,
+    labels: MONTH_NAMES_SHORT_JA,
     datasets: [
       {
         label: '月間発電量 (kWh)',
@@ -47,7 +47,7 @@ export default function MonthlyChart({ monthly }) {
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
       <h3 className="text-sm font-semibold text-gray-700 mb-3">月別発電量</h3>
       <div style={{ height: '220px' }}>
         <Bar data={data} options={options} />

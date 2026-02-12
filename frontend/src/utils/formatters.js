@@ -18,3 +18,8 @@ export function formatNumber(value, decimals = 1) {
   if (value == null) return '—';
   return value.toFixed(decimals);
 }
+
+export function formatPercentRaw(value) {
+  if (value == null) return '—';
+  return `${value.toFixed(1)}%`;
+}
